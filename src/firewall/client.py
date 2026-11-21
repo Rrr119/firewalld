@@ -19,6 +19,11 @@ from firewall.core.base import (
 )
 from firewall.dbus_utils import dbus_to_python, dbus_to_python_args
 from firewall.core.rich import Rich_Rule
+from firewall.core.rule_batch import (
+    find_rule_conflicts,
+    normalize_rules,
+    raise_for_conflicts,
+)
 from firewall.core.ipset import (
     normalize_ipset_entry,
     check_entry_overlaps_existing,
@@ -563,6 +568,33 @@ class FirewallClientZoneSettings:
             raise FirewallError(errors.ALREADY_ENABLED, rule)
 
     @handle_exceptions
+    def addRichRules(self, rules):
+        normalized = normalize_rules(rules)
+        existing = [Rich_Rule(rule_str=rule) for rule in self.settings[12]]
+        raise_for_conflicts(find_rule_conflicts(normalized, existing))
+        self.settings[12].extend(str(rule) for rule in normalized)
+
+    @handle_exceptions
+    def removeRichRules(self, rules):
+        normalized = normalize_rules(rules)
+        for rule in normalized:
+            if str(rule) not in self.settings[12]:
+                raise FirewallError(errors.NOT_ENABLED, str(rule))
+        for rule in normalized:
+            self.settings[12].remove(str(rule))
+
+    @handle_exceptions
+    def queryRichRules(self, rules):
+        normalized = normalize_rules(rules)
+        return all(str(rule) in self.settings[12] for rule in normalized)
+
+    @handle_exceptions
+    def getRichRuleConflicts(self, rules):
+        normalized = normalize_rules(rules)
+        existing = [Rich_Rule(rule_str=rule) for rule in self.settings[12]]
+        return [str(conflict) for conflict in find_rule_conflicts(normalized, existing)]
+
+    @handle_exceptions
     def removeRichRule(self, rule):
         rule = str(Rich_Rule(rule_str=rule))
         if rule in self.settings[12]:
@@ -969,6 +1001,22 @@ class FirewallClientConfigZone:
         self.fw_zone.addRichRule(rule)
 
     @handle_exceptions
+    def addRichRules(self, rules):
+        self.fw_zone.addRichRules(rules)
+
+    @handle_exceptions
+    def removeRichRules(self, rules):
+        self.fw_zone.removeRichRules(rules)
+
+    @handle_exceptions
+    def queryRichRules(self, rules):
+        return self.fw_zone.queryRichRules(rules)
+
+    @handle_exceptions
+    def getRichRuleConflicts(self, rules):
+        return self.fw_zone.getRichRuleConflicts(rules)
+
+    @handle_exceptions
     def removeRichRule(self, rule):
         self.fw_zone.removeRichRule(rule)
 
@@ -1324,6 +1372,33 @@ class FirewallClientPolicySettings:
             self.settings["rich_rules"].append(rule)
         else:
             raise FirewallError(errors.ALREADY_ENABLED, rule)
+
+    @handle_exceptions
+    def addRichRules(self, rules):
+        normalized = normalize_rules(rules)
+        existing = [Rich_Rule(rule_str=rule) for rule in self.settings["rich_rules"]]
+        raise_for_conflicts(find_rule_conflicts(normalized, existing))
+        self.settings["rich_rules"].extend(str(rule) for rule in normalized)
+
+    @handle_exceptions
+    def removeRichRules(self, rules):
+        normalized = normalize_rules(rules)
+        for rule in normalized:
+            if str(rule) not in self.settings["rich_rules"]:
+                raise FirewallError(errors.NOT_ENABLED, str(rule))
+        for rule in normalized:
+            self.settings["rich_rules"].remove(str(rule))
+
+    @handle_exceptions
+    def queryRichRules(self, rules):
+        normalized = normalize_rules(rules)
+        return all(str(rule) in self.settings["rich_rules"] for rule in normalized)
+
+    @handle_exceptions
+    def getRichRuleConflicts(self, rules):
+        normalized = normalize_rules(rules)
+        existing = [Rich_Rule(rule_str=rule) for rule in self.settings["rich_rules"]]
+        return [str(conflict) for conflict in find_rule_conflicts(normalized, existing)]
 
     @handle_exceptions
     def removeRichRule(self, rule):
@@ -3559,8 +3634,28 @@ class FirewallClient:
         return dbus_to_python(self.fw_zone.addRichRule(zone, rule, timeout))
 
     @handle_exceptions
+    def addRichRules(self, zone, rules, timeout=0):
+        return dbus_to_python(self.fw_zone.addRichRules(zone, rules, timeout))
+
+    @handle_exceptions
+    def addRichRulesForZones(self, zones, rules, timeout=0):
+        return dbus_to_python(self.fw_zone.addRichRulesForZones(zones, rules, timeout))
+
+    @handle_exceptions
+    def checkRichRules(self, zone, rules):
+        return dbus_to_python(self.fw_zone.checkRichRules(zone, rules))
+
+    @handle_exceptions
+    def getRichRuleConflicts(self, zone, rules):
+        return dbus_to_python(self.fw_zone.getRichRuleConflicts(zone, rules))
+
+    @handle_exceptions
     def getRichRules(self, zone):
         return dbus_to_python(self.fw_zone.getRichRules(zone))
+
+    @handle_exceptions
+    def queryRichRules(self, zone, rules):
+        return dbus_to_python(self.fw_zone.queryRichRules(zone, rules))
 
     @handle_exceptions
     def queryRichRule(self, zone, rule):
@@ -3569,6 +3664,10 @@ class FirewallClient:
     @handle_exceptions
     def removeRichRule(self, zone, rule):
         return dbus_to_python(self.fw_zone.removeRichRule(zone, rule))
+
+    @handle_exceptions
+    def removeRichRules(self, zone, rules):
+        return dbus_to_python(self.fw_zone.removeRichRules(zone, rules))
 
     # services
 

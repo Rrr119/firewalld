@@ -1,0 +1,17 @@
+{
+  "root": "/home/dev/feedback/uid30823",
+  "B": "/home/dev/feedback/uid30823",
+  "sha": "62a825bd5365a3c0b86edb8b2d6cda7b25db865f",
+  "wslDistro": "Ubuntu-26.04",
+  "source": {
+    "owner": "firewalld",
+    "repo": "firewalld",
+    "sha": "62a825bd5365a3c0b86edb8b2d6cda7b25db865f"
+  },
+  "fork": {
+    "owner": "Rrr119",
+    "repo": "firewalld",
+    "cloneUrl": "https://github.com/Rrr119/firewalld.git"
+  },
+  "at": "2026-11-20T17:56:32.279Z"
+}

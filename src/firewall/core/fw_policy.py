@@ -7,6 +7,11 @@ import copy
 import dataclasses
 
 from firewall.core.logger import log
+from firewall.core.rule_batch import (
+    find_rule_conflicts,
+    normalize_rules,
+    raise_for_conflicts,
+)
 from firewall.functions import (
     portStr,
     checkIPnMask,
@@ -259,6 +264,12 @@ class FirewallPolicy:
         )
 
         for key in remove_settings:
+            if key == "rich_rules":
+                self.remove_rules(
+                    policy,
+                    [Rich_Rule(rule_str=rule) for rule in remove_settings[key]],
+                )
+                continue
             if isinstance(remove_settings[key], list):
                 for args in remove_settings[key]:
                     if isinstance(args, tuple):
@@ -269,6 +280,14 @@ class FirewallPolicy:
                 setting_to_fn[key][1](policy)
 
         for key in add_settings:
+            if key == "rich_rules":
+                self.add_rules(
+                    policy,
+                    [Rich_Rule(rule_str=rule) for rule in add_settings[key]],
+                    timeout=timeout,
+                    sender=sender,
+                )
+                continue
             if isinstance(add_settings[key], list):
                 for args in add_settings[key]:
                     if isinstance(args, tuple):
@@ -471,6 +490,81 @@ class FirewallPolicy:
 
     def __rule(self, enable, policy, rule, transaction):
         self._rule_prepare(enable, policy, rule, transaction)
+
+    def _prepare_rule_batch(self, policy, rules):
+        policy = self._fw.check_policy(policy)
+        normalized = normalize_rules(rules)
+        existing = [Rich_Rule(rule_str=rule) for rule in self._policies[policy].rules]
+        conflicts = find_rule_conflicts(normalized, existing)
+        return policy, normalized, conflicts
+
+    def find_rule_conflicts(self, policy, rules):
+        """Return conflicts for a batch without changing the policy."""
+        _policy, _rules, conflicts = self._prepare_rule_batch(policy, rules)
+        return conflicts
+
+    def check_rules(self, policy, rules):
+        """Validate a batch and raise if it conflicts with existing rules."""
+        _policy, _rules, conflicts = self._prepare_rule_batch(policy, rules)
+        raise_for_conflicts(conflicts)
+        return True
+
+    def add_rules(self, policy, rules, timeout=0, sender=None):
+        """Add a batch of rich rules atomically to an existing policy."""
+        self._fw.check_timeout(timeout)
+        policy, normalized, conflicts = self._prepare_rule_batch(policy, rules)
+        raise_for_conflicts(conflicts)
+
+        added = []
+        try:
+            for rule in normalized:
+                self.add_rule(policy, rule, timeout, sender)
+                added.append(rule)
+        except Exception:
+            for rule in reversed(added):
+                try:
+                    self.remove_rule(policy, rule)
+                except Exception as msg:
+                    log.error("Failed to roll back rich rule '%s': %s", rule, msg)
+            raise
+
+        return policy
+
+    def remove_rules(self, policy, rules):
+        """Remove a batch of rich rules from an existing policy."""
+        policy = self._fw.check_policy(policy)
+        normalized = normalize_rules(rules)
+
+        for rule in normalized:
+            if not self.query_rule(policy, rule):
+                raise FirewallError(
+                    errors.NOT_ENABLED, "'%s' not in '%s'" % (rule, policy)
+                )
+
+        removed = []
+        try:
+            for rule in normalized:
+                self.remove_rule(policy, rule)
+                removed.append(rule)
+        except Exception:
+            for rule in reversed(removed):
+                try:
+                    self.add_rule(policy, rule)
+                except Exception as msg:
+                    log.error("Failed to roll back rich rule '%s': %s", rule, msg)
+            raise
+
+        return policy
+
+    def query_rules(self, policy, rules):
+        """Return True if all rules in the batch are enabled in the policy."""
+        policy = self._fw.check_policy(policy)
+        normalized = normalize_rules(rules)
+        return all(self.query_rule(policy, rule) for rule in normalized)
+
+    add_rich_rules = add_rules
+    remove_rich_rules = remove_rules
+    query_rich_rules = query_rules
 
     def add_rule(self, policy, rule, timeout=0, sender=None):
         _policy = self._fw.check_policy(policy)

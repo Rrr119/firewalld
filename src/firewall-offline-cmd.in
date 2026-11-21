@@ -2770,13 +2770,16 @@ try:
             l = fw_settings.getRichRules()
             cmd.print_and_exit("\n".join(l))
         elif a.add_rich_rule:
-            cmd.add_sequence(
-                a.add_rich_rule,
-                fw_settings.addRichRule,
-                fw_settings.queryRichRule,
-                None,
-                "'%s'",
-            )
+            if len(a.add_rich_rule) > 1:
+                cmd.add_rich_rules_sequence(a.add_rich_rule, fw_settings.addRichRules)
+            else:
+                cmd.add_sequence(
+                    a.add_rich_rule,
+                    fw_settings.addRichRule,
+                    fw_settings.queryRichRule,
+                    None,
+                    "'%s'",
+                )
         elif a.remove_rich_rule:
             cmd.remove_sequence(
                 a.remove_rich_rule,
@@ -3150,13 +3153,16 @@ try:
             l = fw_settings.getRichRules()
             cmd.print_and_exit("\n".join(l))
         elif a.add_rich_rule:
-            cmd.add_sequence(
-                a.add_rich_rule,
-                fw_settings.addRichRule,
-                fw_settings.queryRichRule,
-                None,
-                "'%s'",
-            )
+            if len(a.add_rich_rule) > 1:
+                cmd.add_rich_rules_sequence(a.add_rich_rule, fw_settings.addRichRules)
+            else:
+                cmd.add_sequence(
+                    a.add_rich_rule,
+                    fw_settings.addRichRule,
+                    fw_settings.queryRichRule,
+                    None,
+                    "'%s'",
+                )
         elif a.remove_rich_rule:
             cmd.remove_sequence(
                 a.remove_rich_rule,

@@ -1520,6 +1520,76 @@ class FirewallD(DbusServiceObject):
 
     @dbus_polkit_require_auth(config.dbus.PK_ACTION_CONFIG)
     @dbus_service_method(
+        config.dbus.DBUS_INTERFACE_ZONE, in_signature="sasi", out_signature="s"
+    )
+    @dbus_handle_exceptions
+    def addRichRules(self, zone, rules, timeout, sender=None):
+        zone = dbus_to_python(zone, str)
+        rules = dbus_to_python(rules, list)
+        timeout = dbus_to_python(timeout, int)
+        log.debug1("zone.addRichRules('%s', %d rules)", zone, len(rules))
+        objects = [Rich_Rule(rule_str=rule) for rule in rules]
+        _zone = self.fw.zone.add_rules(zone, objects, timeout)
+
+        for obj in objects:
+            rule = str(obj)
+            if timeout > 0:
+                GLib.timeout_add_seconds(timeout, self.RichRuleRemoved, _zone, rule)
+            self.RichRuleAdded(_zone, rule, timeout)
+
+        return _zone
+
+    @dbus_polkit_require_auth(config.dbus.PK_ACTION_CONFIG)
+    @dbus_service_method(
+        config.dbus.DBUS_INTERFACE_ZONE, in_signature="asasi", out_signature="as"
+    )
+    @dbus_handle_exceptions
+    def addRichRulesForZones(self, zones, rules, timeout, sender=None):
+        zones = dbus_to_python(zones, list)
+        rules = dbus_to_python(rules, list)
+        timeout = dbus_to_python(timeout, int)
+        log.debug1(
+            "zone.addRichRulesForZones(%d zones, %d rules)", len(zones), len(rules)
+        )
+        objects = [Rich_Rule(rule_str=rule) for rule in rules]
+        _zones = self.fw.zone.add_rules_for_zones(zones, objects, timeout)
+
+        for _zone in _zones:
+            for obj in objects:
+                rule = str(obj)
+                if timeout > 0:
+                    GLib.timeout_add_seconds(timeout, self.RichRuleRemoved, _zone, rule)
+                self.RichRuleAdded(_zone, rule, timeout)
+
+        return _zones
+
+    @dbus_polkit_require_auth(config.dbus.PK_ACTION_CONFIG_INFO)
+    @dbus_service_method(
+        config.dbus.DBUS_INTERFACE_ZONE, in_signature="sas", out_signature="b"
+    )
+    @dbus_handle_exceptions
+    def checkRichRules(self, zone, rules, sender=None):  # pylint: disable=W0613
+        zone = dbus_to_python(zone, str)
+        rules = dbus_to_python(rules, list)
+        objects = [Rich_Rule(rule_str=rule) for rule in rules]
+        return self.fw.zone.check_rules(zone, objects)
+
+    @dbus_polkit_require_auth(config.dbus.PK_ACTION_CONFIG_INFO)
+    @dbus_service_method(
+        config.dbus.DBUS_INTERFACE_ZONE, in_signature="sas", out_signature="as"
+    )
+    @dbus_handle_exceptions
+    def getRichRuleConflicts(self, zone, rules, sender=None):  # pylint: disable=W0613
+        zone = dbus_to_python(zone, str)
+        rules = dbus_to_python(rules, list)
+        objects = [Rich_Rule(rule_str=rule) for rule in rules]
+        return [
+            str(conflict)
+            for conflict in self.fw.zone.find_rule_conflicts(zone, objects)
+        ]
+
+    @dbus_polkit_require_auth(config.dbus.PK_ACTION_CONFIG)
+    @dbus_service_method(
         config.dbus.DBUS_INTERFACE_ZONE, in_signature="ss", out_signature="s"
     )
     @dbus_handle_exceptions
@@ -1530,6 +1600,23 @@ class FirewallD(DbusServiceObject):
         obj = Rich_Rule(rule_str=rule)
         _zone = self.fw.zone.remove_rule(zone, obj)
         self.RichRuleRemoved(_zone, rule)
+        return _zone
+
+    @dbus_polkit_require_auth(config.dbus.PK_ACTION_CONFIG)
+    @dbus_service_method(
+        config.dbus.DBUS_INTERFACE_ZONE, in_signature="sas", out_signature="s"
+    )
+    @dbus_handle_exceptions
+    def removeRichRules(self, zone, rules, sender=None):
+        zone = dbus_to_python(zone, str)
+        rules = dbus_to_python(rules, list)
+        log.debug1("zone.removeRichRules('%s', %d rules)", zone, len(rules))
+        objects = [Rich_Rule(rule_str=rule) for rule in rules]
+        _zone = self.fw.zone.remove_rules(zone, objects)
+
+        for obj in objects:
+            self.RichRuleRemoved(_zone, str(obj))
+
         return _zone
 
     @dbus_polkit_require_auth(config.dbus.PK_ACTION_CONFIG_INFO)
@@ -1543,6 +1630,17 @@ class FirewallD(DbusServiceObject):
         log.debug1("zone.queryRichRule('%s', '%s')" % (zone, rule))
         obj = Rich_Rule(rule_str=rule)
         return self.fw.zone.query_rule(zone, obj)
+
+    @dbus_polkit_require_auth(config.dbus.PK_ACTION_CONFIG_INFO)
+    @dbus_service_method(
+        config.dbus.DBUS_INTERFACE_ZONE, in_signature="sas", out_signature="b"
+    )
+    @dbus_handle_exceptions
+    def queryRichRules(self, zone, rules, sender=None):  # pylint: disable=W0613
+        zone = dbus_to_python(zone, str)
+        rules = dbus_to_python(rules, list)
+        objects = [Rich_Rule(rule_str=rule) for rule in rules]
+        return self.fw.zone.query_rules(zone, objects)
 
     @dbus_polkit_require_auth(config.dbus.PK_ACTION_CONFIG_INFO)
     @dbus_service_method(

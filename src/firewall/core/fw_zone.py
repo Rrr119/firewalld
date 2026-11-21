@@ -11,6 +11,11 @@ import copy
 from firewall.core.base import SHORTCUTS, DEFAULT_ZONE_TARGET, SOURCE_IPSET_TYPES
 from firewall.core.io.policy import Policy
 from firewall.core.logger import log
+from firewall.core.rule_batch import (
+    find_rule_conflicts,
+    normalize_rules,
+    raise_for_conflicts,
+)
 from firewall.core.rich import (
     Rich_ForwardPort,
     Rich_IcmpBlock,
@@ -552,6 +557,11 @@ class FirewallZone:
         )
 
         for key in remove_settings:
+            if key == "rules_str":
+                self.remove_rules(
+                    zone, [Rich_Rule(rule_str=rule) for rule in remove_settings[key]]
+                )
+                continue
             if isinstance(remove_settings[key], list):
                 for args in remove_settings[key]:
                     if isinstance(args, tuple):
@@ -562,6 +572,14 @@ class FirewallZone:
                 setting_to_fn[key][1](zone)
 
         for key in add_settings:
+            if key == "rules_str":
+                self.add_rules(
+                    zone,
+                    [Rich_Rule(rule_str=rule) for rule in add_settings[key]],
+                    timeout=timeout,
+                    sender=sender,
+                )
+                continue
             if isinstance(add_settings[key], list):
                 for args in add_settings[key]:
                     if key in ["interfaces", "sources"]:
@@ -1067,6 +1085,176 @@ class FirewallZone:
         ]:
             ret.update(set(self._fw.policy.list_rules(p_name)))
         return list(ret)
+
+    def _prepare_rule_batch(self, zone, rules):
+        zone = self._fw.check_zone(zone)
+        normalized = normalize_rules(rules)
+
+        rules_by_policy = {}
+        for rule in normalized:
+            policy = self._get_policy_for_rich_rule(zone, rule)
+            rules_by_policy.setdefault(policy, []).append(rule)
+
+        conflicts = []
+        for policy, batch in rules_by_policy.items():
+            existing = [
+                Rich_Rule(rule_str=rule) for rule in self._fw.policy.list_rules(policy)
+            ]
+            conflicts.extend(find_rule_conflicts(batch, existing))
+
+        return zone, normalized, conflicts
+
+    def find_rule_conflicts(self, zone, rules):
+        """Return conflicts for a batch without changing the zone."""
+        _zone, _rules, conflicts = self._prepare_rule_batch(zone, rules)
+        return conflicts
+
+    def check_rules(self, zone, rules):
+        """Validate a batch and raise if it conflicts with existing rules."""
+        _zone, _rules, conflicts = self._prepare_rule_batch(zone, rules)
+        raise_for_conflicts(conflicts)
+        return True
+
+    def add_rules(self, zone, rules, timeout=0, sender=None):
+        """Add a batch of rich rules atomically to an existing zone."""
+        self._fw.check_timeout(timeout)
+        zone, normalized, conflicts = self._prepare_rule_batch(zone, rules)
+        raise_for_conflicts(conflicts)
+
+        added = []
+        try:
+            for rule in normalized:
+                self.add_rule(zone, rule, timeout, sender)
+                added.append(rule)
+        except Exception:
+            for rule in reversed(added):
+                try:
+                    self.remove_rule(zone, rule)
+                except Exception as msg:
+                    log.error("Failed to roll back rich rule '%s': %s", rule, msg)
+            raise
+
+        return zone
+
+    def remove_rules(self, zone, rules):
+        """Remove a batch of rich rules from an existing zone."""
+        zone = self._fw.check_zone(zone)
+        normalized = normalize_rules(rules)
+
+        for rule in normalized:
+            if not self.query_rule(zone, rule):
+                raise FirewallError(
+                    errors.NOT_ENABLED, "'%s' not in '%s'" % (rule, zone)
+                )
+
+        removed = []
+        try:
+            for rule in normalized:
+                self.remove_rule(zone, rule)
+                removed.append(rule)
+        except Exception:
+            for rule in reversed(removed):
+                try:
+                    self.add_rule(zone, rule)
+                except Exception as msg:
+                    log.error("Failed to roll back rich rule '%s': %s", rule, msg)
+            raise
+
+        return zone
+
+    def query_rules(self, zone, rules):
+        """Return True if all rules in the batch are enabled in the zone."""
+        zone = self._fw.check_zone(zone)
+        normalized = normalize_rules(rules)
+        return all(self.query_rule(zone, rule) for rule in normalized)
+
+    def add_rules_for_zones(self, zones, rules, timeout=0, sender=None):
+        """Add the same rule batch to one or more existing zones."""
+        if isinstance(zones, str):
+            zones = [zones]
+        else:
+            zones = list(zones)
+        if not zones:
+            raise FirewallError(errors.INVALID_ZONE, "zone list is empty")
+
+        normalized = normalize_rules(rules)
+        checked_zones = []
+        for zone in zones:
+            checked_zone = self._fw.check_zone(zone)
+            if checked_zone not in checked_zones:
+                checked_zones.append(checked_zone)
+
+        # Validate every zone before changing any of them.
+        for zone in checked_zones:
+            _zone, _rules, conflicts = self._prepare_rule_batch(zone, normalized)
+            raise_for_conflicts(conflicts)
+
+        added = []
+        try:
+            for zone in checked_zones:
+                self.add_rules(zone, normalized, timeout, sender)
+                added.append(zone)
+        except Exception:
+            for zone in reversed(added):
+                try:
+                    self.remove_rules(zone, normalized)
+                except Exception as msg:
+                    log.error(
+                        "Failed to roll back rich rule batch in zone '%s': %s",
+                        zone,
+                        msg,
+                    )
+            raise
+
+        return checked_zones
+
+    def remove_rules_for_zones(self, zones, rules):
+        """Remove the same rule batch from one or more existing zones."""
+        if isinstance(zones, str):
+            zones = [zones]
+        else:
+            zones = list(zones)
+        if not zones:
+            raise FirewallError(errors.INVALID_ZONE, "zone list is empty")
+
+        normalized = normalize_rules(rules)
+        checked_zones = []
+        for zone in zones:
+            checked_zone = self._fw.check_zone(zone)
+            if checked_zone not in checked_zones:
+                checked_zones.append(checked_zone)
+
+        for zone in checked_zones:
+            for rule in normalized:
+                if not self.query_rule(zone, rule):
+                    raise FirewallError(
+                        errors.NOT_ENABLED, "'%s' not in '%s'" % (rule, zone)
+                    )
+
+        removed = []
+        try:
+            for zone in checked_zones:
+                self.remove_rules(zone, normalized)
+                removed.append(zone)
+        except Exception:
+            for zone in reversed(removed):
+                try:
+                    self.add_rules(zone, normalized)
+                except Exception as msg:
+                    log.error(
+                        "Failed to roll back rich rule batch in zone '%s': %s",
+                        zone,
+                        msg,
+                    )
+            raise
+
+        return checked_zones
+
+    add_rich_rules = add_rules
+    remove_rich_rules = remove_rules
+    query_rich_rules = query_rules
+    add_rich_rules_for_zones = add_rules_for_zones
+    remove_rich_rules_for_zones = remove_rules_for_zones
 
     def add_protocol(self, zone, protocol, timeout=0, sender=None):
         zone = self._fw.check_zone(zone)

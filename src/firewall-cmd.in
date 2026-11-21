@@ -316,7 +316,8 @@ Options to Adapt and Query Zones and Policies
   --query-masquerade   Return whether IPv4 masquerading has been enabled [P] [Z] [O]
   --list-rich-rules    List rich language rules added [P] [Z] [O]
   --add-rich-rule=<rule>
-                       Add rich language rule 'rule' [P] [Z] [O] [T]
+                       Add rich language rule 'rule' [P] [Z] [O] [T].
+                       May be specified multiple times to add rules as a batch.
   --remove-rich-rule=<rule>
                        Remove rich language rule 'rule' [P] [Z] [O]
   --query-rich-rule=<rule>
@@ -2586,13 +2587,16 @@ if a.permanent:
             l = settings.getRichRules()
             cmd.print_and_exit("\n".join(l))
         elif a.add_rich_rule:
-            cmd.add_sequence(
-                a.add_rich_rule,
-                settings.addRichRule,
-                settings.queryRichRule,
-                None,
-                "'%s'",
-            )
+            if len(a.add_rich_rule) > 1:
+                cmd.add_rich_rules_sequence(a.add_rich_rule, settings.addRichRules)
+            else:
+                cmd.add_sequence(
+                    a.add_rich_rule,
+                    settings.addRichRule,
+                    settings.queryRichRule,
+                    None,
+                    "'%s'",
+                )
         elif a.remove_rich_rule:
             cmd.remove_sequence(
                 a.remove_rich_rule,
@@ -2916,13 +2920,16 @@ if a.permanent:
             l = fw_zone.getRichRules()
             cmd.print_and_exit("\n".join(l))
         elif a.add_rich_rule:
-            cmd.add_sequence(
-                a.add_rich_rule,
-                fw_zone.addRichRule,
-                fw_zone.queryRichRule,
-                None,
-                "'%s'",
-            )
+            if len(a.add_rich_rule) > 1:
+                cmd.add_rich_rules_sequence(a.add_rich_rule, fw_zone.addRichRules)
+            else:
+                cmd.add_sequence(
+                    a.add_rich_rule,
+                    fw_zone.addRichRule,
+                    fw_zone.queryRichRule,
+                    None,
+                    "'%s'",
+                )
         elif a.remove_rich_rule:
             cmd.remove_sequence(
                 a.remove_rich_rule,
@@ -3648,9 +3655,16 @@ elif a.policy:
         l = settings.getRichRules()
         cmd.print_and_exit("\n".join(l))
     elif a.add_rich_rule:
-        cmd.add_sequence(
-            a.add_rich_rule, settings.addRichRule, settings.queryRichRule, None, "'%s'"
-        )
+        if len(a.add_rich_rule) > 1:
+            cmd.add_rich_rules_sequence(a.add_rich_rule, settings.addRichRules)
+        else:
+            cmd.add_sequence(
+                a.add_rich_rule,
+                settings.addRichRule,
+                settings.queryRichRule,
+                None,
+                "'%s'",
+            )
     elif a.remove_rich_rule:
         cmd.remove_sequence(
             a.remove_rich_rule,
@@ -3836,9 +3850,21 @@ elif a.list_rich_rules:
     l = fw.getRichRules(zone)
     cmd.print_and_exit("\n".join(l))
 elif a.add_rich_rule:
-    cmd.zone_add_timeout_sequence(
-        zone, a.add_rich_rule, fw.addRichRule, fw.queryRichRule, None, "'%s'", a.timeout
-    )
+    if len(a.add_rich_rule) > 1:
+        cmd.add_rich_rules_sequence(
+            a.add_rich_rule,
+            lambda rules: fw.addRichRules(zone, rules, a.timeout),
+        )
+    else:
+        cmd.zone_add_timeout_sequence(
+            zone,
+            a.add_rich_rule,
+            fw.addRichRule,
+            fw.queryRichRule,
+            None,
+            "'%s'",
+            a.timeout,
+        )
 elif a.remove_rich_rule:
     cmd.x_remove_sequence(
         zone, a.remove_rich_rule, fw.removeRichRule, fw.queryRichRule, None, "'%s'"

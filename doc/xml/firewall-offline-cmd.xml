@@ -1023,7 +1023,7 @@
 	  <term><optional><option>--zone</option>=<replaceable>zone</replaceable></optional> <optional><option>--policy</option>=<replaceable>policy</replaceable></optional> <option>--add-rich-rule</option>='<replaceable>rule</replaceable>'</term>
 	  <listitem>
 	    <para>
-	      Add rich language rule '<replaceable>rule</replaceable>'. This option can be specified multiple times.
+	      Add rich language rule '<replaceable>rule</replaceable>'. This option can be specified multiple times. Multiple rules are validated for conflicts and applied as one batch.
 	    </para>
 	    <para>
 	      For the rich language rule syntax, please have a look at <citerefentry><refentrytitle>firewalld.richlanguage</refentrytitle><manvolnum>5</manvolnum></citerefentry>.

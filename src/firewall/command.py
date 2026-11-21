@@ -231,6 +231,33 @@ class FirewallCommand:
             no_exit=no_exit,
         )
 
+    def add_rich_rules_sequence(self, rules, action_method, *args):
+        """Apply multiple rich rules in one atomic operation."""
+        if self.fw is not None:
+            self.fw.authorizeAll()
+
+        self.deactivate_exception_handler()
+        try:
+            action_method(rules, *args)
+        except (DBusException, Exception) as msg:
+            if isinstance(msg, DBusException):
+                self.fail_if_not_authorized(msg.get_dbus_name())
+                msg = msg.get_dbus_message()
+            else:
+                msg = str(msg)
+            code = FirewallError.get_code(msg)
+            if code in [
+                errors.ALREADY_ENABLED,
+                errors.NOT_ENABLED,
+                errors.ZONE_ALREADY_SET,
+                errors.ALREADY_SET,
+            ]:
+                self.print_warning("Warning: %s" % msg)
+                return
+            self.print_and_exit("Error: %s" % msg, code)
+        finally:
+            self.activate_exception_handler()
+
     def remove_sequence(
         self,
         option,

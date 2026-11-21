@@ -955,7 +955,7 @@
 	  <term><optional><option>--permanent</option></optional> <optional><option>--zone</option>=<replaceable>zone</replaceable></optional> <optional><option>--policy</option>=<replaceable>policy</replaceable></optional> <option>--add-rich-rule</option>='<replaceable>rule</replaceable>' <optional><option>--timeout</option>=<replaceable>timeval</replaceable></optional></term>
 	  <listitem>
 	    <para>
-	      Add rich language rule '<replaceable>rule</replaceable>'. This option can be specified multiple times. If a timeout is supplied, the <replaceable>rule</replaceable> will be active for the specified amount of time and will be removed automatically afterwards.
+	      Add rich language rule '<replaceable>rule</replaceable>'. This option can be specified multiple times. Multiple rules are validated for conflicts and applied as one batch. If a timeout is supplied, the <replaceable>rule</replaceable> will be active for the specified amount of time and will be removed automatically afterwards.
 	      <replaceable>timeval</replaceable> is either a number (of seconds) or number followed by one of characters <literal>s</literal> (seconds), <literal>m</literal> (minutes), <literal>h</literal> (hours), for example <literal>20m</literal> or <literal>1h</literal>.
 	    </para>
 	    <para>

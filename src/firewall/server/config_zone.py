@@ -18,6 +18,11 @@ from firewall.core.io.zone import Zone
 from firewall.core.fw_ifcfg import ifcfg_set_zone_of_interface
 from firewall.core.base import DEFAULT_ZONE_TARGET
 from firewall.core.rich import Rich_Rule
+from firewall.core.rule_batch import (
+    find_rule_conflicts,
+    normalize_rules,
+    raise_for_conflicts,
+)
 from firewall.core.logger import log
 from firewall.server.dbus import DbusServiceObject
 from firewall.server.decorators import (
@@ -1069,6 +1074,54 @@ class FirewallDConfigZone(DbusServiceObject):
             raise FirewallError(errors.ALREADY_ENABLED, rule)
         settings[12].append(rule_str)
         self.update(settings)
+
+    @dbus_service_method(config.dbus.DBUS_INTERFACE_CONFIG_ZONE, in_signature="as")
+    @dbus_handle_exceptions
+    def addRichRules(self, rules, sender=None):
+        rules = dbus_to_python(rules, list)
+        log.debug1("%s.addRichRules(%d rules)", self._log_prefix, len(rules))
+        self.parent.accessCheck(sender)
+        normalized = normalize_rules(rules)
+        settings = list(self.getSettings())
+        existing = [Rich_Rule(rule_str=rule) for rule in settings[12]]
+        raise_for_conflicts(find_rule_conflicts(normalized, existing))
+        settings[12].extend(str(rule) for rule in normalized)
+        self.update(settings)
+
+    @dbus_service_method(config.dbus.DBUS_INTERFACE_CONFIG_ZONE, in_signature="as")
+    @dbus_handle_exceptions
+    def removeRichRules(self, rules, sender=None):
+        rules = dbus_to_python(rules, list)
+        log.debug1("%s.removeRichRules(%d rules)", self._log_prefix, len(rules))
+        self.parent.accessCheck(sender)
+        normalized = normalize_rules(rules)
+        settings = list(self.getSettings())
+        for rule in normalized:
+            rule_str = str(rule)
+            if rule_str not in settings[12]:
+                raise FirewallError(errors.NOT_ENABLED, rule_str)
+        for rule in normalized:
+            settings[12].remove(str(rule))
+        self.update(settings)
+
+    @dbus_service_method(
+        config.dbus.DBUS_INTERFACE_CONFIG_ZONE, in_signature="as", out_signature="b"
+    )
+    @dbus_handle_exceptions
+    def queryRichRules(self, rules, sender=None):  # pylint: disable=W0613
+        rules = dbus_to_python(rules, list)
+        normalized = normalize_rules(rules)
+        return all(str(rule) in self.getSettings()[12] for rule in normalized)
+
+    @dbus_service_method(
+        config.dbus.DBUS_INTERFACE_CONFIG_ZONE, in_signature="as", out_signature="as"
+    )
+    @dbus_handle_exceptions
+    def getRichRuleConflicts(self, rules, sender=None):  # pylint: disable=W0613
+        rules = dbus_to_python(rules, list)
+        normalized = normalize_rules(rules)
+        existing = [Rich_Rule(rule_str=rule) for rule in self.getSettings()[12]]
+        return [str(conflict) for conflict in find_rule_conflicts(normalized, existing)]
 
     @dbus_service_method(config.dbus.DBUS_INTERFACE_CONFIG_ZONE, in_signature="s")
     @dbus_handle_exceptions

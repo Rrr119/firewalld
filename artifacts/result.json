@@ -1,0 +1,18 @@
+{
+  "uid": "30823",
+  "harness": "Codex CLI",
+  "snapshotUrl": "https://github.com/Rrr119/firewalld/commit/62a825bd5365a3c0b86edb8b2d6cda7b25db865f",
+  "harnessVersion": "codex-cli 0.167.2",
+  "operatingSystem": "Ubuntu 26.04.1 LTS",
+  "operatingSystemCell": [
+    "MacOS/Linux"
+  ],
+  "outputDirectory": "/home/dev/feedback/uid30823",
+  "wslDistro": "Ubuntu-26.04",
+  "B": {
+    "success": false,
+    "side": "B",
+    "error": "当前执行失败：Incomplete response returned, reason: max_output_tokens",
+    "attempts": 6
+  }
+}
